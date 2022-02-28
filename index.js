@@ -1,5 +1,9 @@
 const express = require("express");
 const app = express();
+require("dotenv").config();
+
+const Person = require("./Models/person");
+
 // Middleware
 app.use(express.json());
 const cors = require("cors");
@@ -44,61 +48,108 @@ app.get("/", (request, response) => {
 });
 
 app.get("/api/persons", (request, response) => {
-  response.json(persons);
+  // response.json(persons);
+  Person.find({}).then((result) => {
+    response.json(result);
+  });
 });
 
 app.get("/info", (request, response) => {
-  response.send(`<p> The phonebook has enteries for ${
-    persons.length
-  } people </p>
+  Person.find({}).then((result) => {
+    response.send(`<p> The phonebook has enteries for ${
+      result.length
+    } people </p>
   <p> This information was requested at ${new Date()}`);
+  });
 });
 
 app.get("/api/persons/:id", (request, response) => {
-  const id = +request.params.id;
-  const person = persons.find((person) => person.id === id);
-  if (person) response.json(person);
-  else response.status(404).end();
+  // const id = +request.params.id;
+  // const person = persons.find((person) => person.id === id);
+  Person.findById(request.params.id).then((person) => {
+    if (person) response.json(person);
+    else response.status(404).end();
+  });
 });
 
-app.delete("/api/persons/:id", (request, response) => {
-  const id = +request.params.id;
-  persons = persons.filter((person) => person.id !== id);
-  response.status(204).end();
+app.delete("/api/persons/:id", (request, response, next) => {
+  Person.findByIdAndRemove(request.params.id)
+    .then((result) => {
+      response.status(204).end();
+    })
+    .catch((error) => next(error));
 });
+
 function getRandomInt(min, max) {
   min = Math.ceil(min);
   max = Math.floor(max);
   return Math.floor(Math.random() * (max - min) + min); //The maximum is exclusive and the minimum is inclusive
 }
 
-app.post("/api/persons", (request, response) => {
+app.post("/api/persons", (request, response, next) => {
   const body = request.body;
-  if (!body.name || !body.number) {
-    return response.status(400).json({
-      error: "name and/or number missing",
-    });
-  }
 
-  const check = persons.find((person) => person.name == body.name);
+  // if (!body.name || !body.number) {
+  //   return response.status(400).json({
+  //     error: "name and/or number missing",
+  //   });
+  // }
 
-  if (check) {
-    return response.status(409).json({
-      error: "This name has already been used!",
-    });
-  }
-  const newPerson = {
+  // const check = persons.find((person) => person.name == body.name);
+  // const check = Person.find({}).then((result) => {
+  //   result.find((person) => {
+  //     person.name === body.name;
+  //   });
+  // });
+
+  // if (check) {
+  //   return response.status(409).json({
+  //     error: "This name has already been used!",
+  //   });
+  // }
+  const newPerson = new Person({
     name: body.name,
     number: body.number,
     date: new Date(),
-    id: getRandomInt(5, 10000),
-  };
-
-  persons = persons.concat(newPerson);
-  response.json(newPerson);
+  });
+  newPerson
+    .save()
+    .then((savednewPerson) => {
+      response.json(savednewPerson);
+    })
+    .catch((error) => next(error));
 });
 
-const PORT = process.env.PORT || 3001;
+app.put("/api/persons/:id", (request, response, next) => {
+  const body = request.body;
+
+  const person = {
+    name: body.name,
+    number: body.number,
+  };
+
+  Person.findByIdAndUpdate(request.params.id, person, { new: true })
+    .then((updatedPerson) => {
+      response.json(updatedPerson);
+    })
+    .catch((error) => next(error));
+});
+
+const errorHandler = (error, request, response, next) => {
+  console.error(error.message);
+
+  if (error.name === "CastError") {
+    return response.status(400).send({ error: "malformatted id" });
+  } else if (error.name === "ValidationError") {
+    return response.status(400).json({ error: error.message });
+  }
+
+  next(error);
+};
+
+app.use(errorHandler);
+
+const PORT = process.env.PORT;
 app.listen(PORT, () => {
   console.log(`${PORT} server is running on!`);
 });
